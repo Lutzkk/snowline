@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+#venv 
+*.env
+
+#notebook stuff
+*.ipynb_checkpoints/
+*.ipynb
+
+#data files
+*.csv
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.nc
+*.hdf5
+*.cpg
+*.dbf
+*.gpkg
+*.prj
+*.shp
+*.shx
+*.gdb
