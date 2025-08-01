@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *.so
 
+# data folder 
+data/*
+
 #venv 
 *.env
 

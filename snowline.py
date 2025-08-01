@@ -28,8 +28,12 @@ from pathlib import Path # Important for path handling indepondent of OS (code w
 import ee
 import pandas as pd
 import xarray as xr
+import rioxarray as rxr
 import geopandas as gpd
 import numpy as np
+from rasterio.enums import Resampling
+import shutil
+
 #------------------------
 
 # Environment Setup
@@ -62,6 +66,7 @@ else:
 
 #initialize earthengine api
 ee.Authenticate()
+#change project to your own 
 ee.Initialize(project="ee-lutz-training", opt_url='https://earthengine-highvolume.googleapis.com') #highvolume url is necesarry for the xee (xarray earthengine extension) to work reliably
 
 
@@ -117,18 +122,27 @@ aoi = ee.Geometry(aoi_geojson)
 #------------------------
 #DEM ACQUISITION
 #------------------------
-srtm = ee.Image("CGIAR/SRTM90_V4").clip(aoi)
+ds = (
+    ee.ImageCollection("IGN/RGE_ALTI/1M/2_0")
+    .select("MNT")
+    .map(lambda img: img.clip(aoi).rename("elevation"))
+    .mosaic()
+)
 
 task = ee.batch.Export.image.toDrive(
-    image=srtm,
-    description='SRTM_Export',
-    folder='EarthEngineExports',  # Google Drive folder name
-    fileNamePrefix='SRTM_dem',
+    image=ds,
+    description='RGE_ALTI_mosaic_export',
+    folder='earthengine_exports',     # Folder Google Drive
+    fileNamePrefix='rge_alti_mosaic', 
     region=aoi,
-    scale=90,
+    scale=20,                          # Since the snowmask will be at 20m resolution, we use the same scale for the DEM
+    maxPixels=1e13,
     fileFormat='GeoTIFF'
 )
-task.start()
+
+task.start() #download from drive after task (approx 2 mins)
+
+
 #------------------------
 #BINARY SNOW MASK ACQUISITION
 #------------------------
@@ -197,35 +211,85 @@ print(s2.first().select("SnowMask").projection().getInfo())
 # Confirm result
 print(f"Filtered to {snowmask_unique.sizes['time']} unique timestamps.")
 
+#------------------------
+#EXPORT
+#------------------------
 
-#create output directory to hold temporary netcdf files
 chunk_dir = data_dir / "chunks"
 chunk_dir.mkdir(exist_ok=True)
 
 print("Starting export of dataset from EE to NC for local processing...")
 
+# Export one chunk at a time as DataArray with 'time' dimension preserved
 for i, ts in enumerate(snowmask_unique.time.values):
     ts_dt = pd.to_datetime(ts)
     date_str = ts_dt.strftime("%Y-%m-%d")
     file_path = chunk_dir / f"snowmask_{date_str}.nc"
     
-    # Export one chunk at a time
-    snowmask_unique.isel(time=i).compute().to_netcdf(file_path)
+    #snowmask_da = snowmask_unique["SnowMask"].isel(time=i).compute()
+    
+
+    #Retain time dimension (otherwise you'll get a 2D slice)
+    #snowmask_da = snowmask_da.expand_dims(time=[ts_dt])
+    
+    #snowmask_da.to_netcdf(file_path)
     print(f"Exported {file_path.name}")
 
 print("All files exported successfully.")
 
-chunk_dir = data_dir / "chunks"
+#-------------------------
+#DATACUBE CREATION
+#-------------------------
+nc_files = sorted(chunk_dir.glob("snowmask_*.nc")) #glob from the pathlib module (not glob module) -> ensures compatibility with Path objects
+arrays = [xr.open_dataarray(nc_file) for nc_file in nc_files] #Loop through filelist and open them as standalone arrays
 
-nc_files=sorted(chunk_dir.glob("snowmask_*.nc")) #note that glob is not from the glob package but from pathlib.Path.glob
+# Concatenate along the time dimension and rename coordinates
+combined = xr.concat(arrays, dim="time").rename({"X": "lon", "Y": "lat"}) #concat along the time dimension to form a datacube
 
-datasets=[]
-for nc_file in nc_files:
-    ds = xr.open_dataset(nc_file)
-    datasets.append(ds)
+#sort by time to ensure correct order
+combined = combined.sortby("time") 
 
-#concatenate along the time dimension
-combined=xr.concat(datasets, dim="time").rename({"X": "lon", "Y": "lat"}).sortby("time")
+# Convert bounds to tuple for compatibility with xarray
+# Note: This is a workaround for the xarray issue where bounds are stored as lists. (XEE unwanted interaction)
+# See: https://discourse.pangeo.io/t/xarray-to-netcdf-valueerror-the-truth-value-of-an-array-with-more-than-one-element-is-ambiguous-use-a-any-or-a-all/4785/5
+combined.attrs["bounds"]=tuple(combined.attrs["bounds"]) 
+combined.to_netcdf(data_dir / "Snowmask_datacube.nc")
 
-#save as datacube
-combined.to_netcdf(output_dir / "Snowmask_datacube.nc")
+
+
+#-------------------------
+#DATACUBE MERGE DEM + SNOWMASK
+#-------------------------
+
+#Load DEM
+dem= rxr.open_rasterio(data_dir / "rge_alti_mosaic.tif", masked=True).squeeze() #squeeze to remove single dimension
+
+#Load Snowmask
+snowmask=rxr.open_rasterio(data_dir / "Snowmask_datacube.nc", masked=True)
+
+#reproject dem to fit snowmask (slight offset)
+dem_reprojected = dem.rio.reproject_match(snowmask, resampling=Resampling.bilinear).to_dataset(name="elevation")
+
+snowmask=None #clear memory, we will open snowmask with xarray to preserve the time dimension and avoid a __false__ band dimension
+snowmask=xr.open_dataarray(data_dir / "Snowmask_datacube.nc", engine="netcdf4").to_dataset(name="snowmask")
+
+# Merge the two datasets
+combined=xr.combine_by_coords([dem_reprojected, snowmask])
+
+
+
+cube_path = data_dir / "datacube" / "elevation_snowmask_cube.nc"
+cube_path.parent.mkdir(exist_ok=True)
+combined.to_netcdf(cube_path)
+
+
+#-------------------------
+#CLEANUP
+#-------------------------
+#remove chunks
+if chunk_dir.exists() and chunk_dir.is_dir():
+    print(f"Removing temporary folder: {chunk_dir}")
+    #shutil.rmtree(chunk_dir)
+    print("Chunks folder removed.")
+else:
+    print("No chunk folder found, nothing to clean up.")
