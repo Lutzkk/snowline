@@ -27,3 +27,7 @@ __pycache__/
 *.shp
 *.shx
 *.gdb
+*.zip
+*.tar.gz
+*.7z
+*.rar
