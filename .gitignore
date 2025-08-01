@@ -29,5 +29,6 @@ __pycache__/
 *.gdb
 *.zip
 *.tar.gz
-*.7z
+*.7z*
+
 *.rar
