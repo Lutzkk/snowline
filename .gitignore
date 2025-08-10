@@ -33,5 +33,7 @@ data/*
 *.zip
 *.tar.gz
 *.7z*
-
+*.zip
 *.rar
+*.qmd
+*.geojson
