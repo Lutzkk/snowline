@@ -38,7 +38,7 @@ import shutil
 
 # Environment Setup
 
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(__file__).resolve().parents[1]
 data_dir = project_dir / "data"
 utils_dir = project_dir / "utils"
 output_dir = project_dir / "output"
@@ -67,7 +67,7 @@ else:
 #initialize earthengine api
 ee.Authenticate()
 #change project to your own 
-ee.Initialize(project="ee-lutz-training", opt_url='https://earthengine-highvolume.googleapis.com') #highvolume url is necesarry for the xee (xarray earthengine extension) to work reliably
+ee.Initialize(project="ee-vorarlberg", opt_url='https://earthengine-highvolume.googleapis.com') #highvolume url is necesarry for the xee (xarray earthengine extension) to work reliably
 
 
 def scale_bands(img):
@@ -111,7 +111,7 @@ def binarize_ndsi(img):
 
 #------------------------
 
-aoi_gdf = gpd.read_file("./data/basin.geojson") 
+aoi_gdf = gpd.read_file("./data/basin.geojson").to_crs(epsg=4326) 
 
 #Convert the geometry to ee.Geometry
 aoi_geojson = aoi_gdf.geometry.values[0].__geo_interface__
@@ -135,8 +135,6 @@ task = ee.batch.Export.image.toDrive(
     folder='earthengine_exports',     # Folder Google Drive
     fileNamePrefix='rge_alti_mosaic', 
     region=aoi,
-    scale=20,                          # Since the snowmask will be at 20m resolution, we use the same scale for the DEM
-    maxPixels=1e13,
     fileFormat='GeoTIFF'
 )
 
@@ -255,6 +253,33 @@ combined = combined.sortby("time")
 combined.attrs["bounds"]=tuple(combined.attrs["bounds"]) 
 combined.to_netcdf(data_dir / "Snowmask_datacube.nc")
 
+# --- align names & grids before merge ---
+
+# Use the cube you just made
+# combined dims are ("time", "lon/lat" or "X/Y") → make them ("time","y","x")
+if {"lon","lat"}.issubset(combined.dims):
+    sm = combined.rename({"lon":"x","lat":"y"}).transpose("time","y","x")
+elif {"X","Y"}.issubset(combined.dims):
+    sm = combined.rename({"X":"x","Y":"y"}).transpose("time","y","x")
+else:
+    raise ValueError(f"Unexpected dims for combined: {combined.dims}")
+
+# Tell rioxarray the spatial dims + CRS (UTM 31N)
+sm = sm.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=False)
+sm = sm.rio.write_crs("EPSG:32631", inplace=False)
+
+# Open DEM (the GeoTIFF you exported) and reproject to *exactly* match sm’s grid
+dem_path = data_dir / "rge_alti_mosaic.tif"
+
+
+dem = rxr.open_rasterio(dem_path).squeeze().rename("dem")
+print(dem)
+ref = sm.isel(time=0)
+dem_on_sm = dem.rio.reproject_match(ref, resampling=Resampling.average).astype("float32")
+
+# (optional sanity prints)
+print("SM:", sm.sizes, "CRS:", sm.rio.crs.to_string())
+print("DEM on SM:", dem_on_sm.sizes, "CRS:", dem_on_sm.rio.crs.to_string())
 
 
 #-------------------------
@@ -289,7 +314,7 @@ for name in ds_out.variables:
         ds_out[name].attrs.pop("bounds")
 
 # 4) write with compression
-out_nc = output_dir / "elevation_snowmask_cube.nc"
+out_nc = data_dir / "elevation_snowmask_cube.nc"
 encoding = {
     "snowmask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
     "dem": {"zlib": True, "complevel": 4, "dtype": "float32"},

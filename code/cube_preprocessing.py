@@ -45,11 +45,7 @@ This involves multiple steps:
            4. If obseration value is snow before and snowfree after -> Pixel becomes snow for the first half and snowfree for the second half
            5. If observation value is snowfree before and snow after -> Pixel becomes snowfree for the first half and snowfree for the second half
 3. Calculate the amount of days a pixel is snow covered per calendar year. Then calc the average out of the 5 years available
-
-
 """
-
-
 
 # Load
 ds = xr.open_dataset(data_path, engine="netcdf4")
@@ -88,7 +84,7 @@ def fill_gap_between_two_observations(
     right_idx: int
 ) -> None:
     """
-    Mutates `out` in-place between (left_idx, right_idx) according to your rules.
+    Mutates `out` in-place between (left_idx, right_idx) according to the rules specified in 2.b.I.
 
     Rules recap:
       values are {0: NoSnow, 1: Snow, 3: Dummy}
@@ -179,5 +175,14 @@ snow_days_per_year = subset.groupby("time.year").sum("time")  # dims: (year, y, 
 # mask out pixels outside of aoi
 snow_days_per_year = snow_days_per_year.where(in_bounds)
 
+
+#turn data array back to xr dataset and save the output
+out = xr.Dataset(
+    data_vars=dict(
+        snow_days_per_year=snow_days_per_year,  # (year, y, x)
+        dem=ds["dem"]                            # (y, x)
+    )
+)
+
 #to_netcdf
-snow_days_per_year.to_netcdf(data_dir / "snow_days_per_year.nc")
+out.to_netcdf(data_dir / "snow_days_per_year.nc")
