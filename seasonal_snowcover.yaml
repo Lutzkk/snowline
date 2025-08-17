@@ -1,0 +1,15 @@
+name: seasonal_snowcover
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.2
+  - xarray-spatial
+  - rioxarray
+  - matplotlib
+  - pandas
+  - xarray
+  - numpy
+  - ipykernel
+  - dask
+  - netcdf4

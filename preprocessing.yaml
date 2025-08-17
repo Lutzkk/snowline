@@ -1,0 +1,17 @@
+name: preprocessing
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.12
+  - numpy
+  - rasterio
+  - pandas
+  - dask
+  - xarray
+  - rioxarray
+  - netcdf4
+  - ipykernel
+  - matplotlib
+  - earthengine-api
+  - geopandas
