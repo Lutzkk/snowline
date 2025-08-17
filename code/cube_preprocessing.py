@@ -1,5 +1,6 @@
 # cube_preprocessing.py
 # Python 3.10
+# Github Link: https://github.com/Lutzkk/snowstats
 
 from pathlib import Path
 import os
@@ -14,27 +15,26 @@ OUT_NC   = DATA_DIR / "snow_days_per_year.nc"
 
 print("Input cube :", IN_CUBE)
 print("Output file:", OUT_NC)
-if not IN_CUBE.exists():
-    raise FileNotFoundError(f"Missing input: {IN_CUBE}")
 
-# --- load ---
+
+#load dds
 ds = xr.open_dataset(IN_CUBE, engine="netcdf4")
 if "snowmask" not in ds or "dem" not in ds:
     raise KeyError("Need variables 'snowmask'(time,y,x) and 'dem'(y,x).")
 
-# tri-state: 1.0 snow, 0.0 no-snow, NaN missing/outside
+#1.0 snow, 0.0 no-snow, NaN missing/outside
 sm  = ds["snowmask"].astype("float32")
 dem = ds["dem"].astype("float32")
 in_bounds = ~xr.ufuncs.isnan(dem)
 
-# 1) daily presence (NaN on days w/o acquisition; NaN outside basin)
+#daily presence
 daily = sm.resample(time="1D").max().where(in_bounds).astype("float32")
-# for the gufunc, make time a single chunk; keep spatial chunks small if you like
+#chunk to enable dask
 daily = daily.chunk({"time": -1})
 
-# 2) unlimited gap bridging between consecutive observations
+#unlimited gap bridging between consecutive observations
 def fill_between_obs(arr_1d: np.ndarray) -> np.ndarray:
-    # arr_1d in {0.0, 1.0, NaN}
+    #arr_1d in {0, 1, NaN}
     out = arr_1d.copy()
     obs_idx = np.flatnonzero(np.isfinite(out))  # positions with 0 or 1
     if obs_idx.size < 2:
@@ -64,22 +64,22 @@ bridged = xr.apply_ufunc(
     output_dtypes=[np.float32],
 )
 
-# 3) yearly snow-day counts (keep float so NaN stays NaN)
+# yearly snow-day counts (keep float so NaN stays NaN)
 YEAR_START, YEAR_END = "2018-01-01", "2024-12-31"
 subset = bridged.sel(time=slice(YEAR_START, YEAR_END))
 
 valid_days = subset.notnull().groupby("time.year").sum("time")
 snow_days_per_year = (
-    (subset == 1.0).astype("float32")   # float, not uint, so we can keep NaNs
+    (subset == 1.0).astype("float32")   #float, not uint, so NaN stays NaN
     .groupby("time.year").sum("time")
 ).where(valid_days > 0)
 snow_days_per_year = snow_days_per_year.rename("snow_days_per_year").astype("float32")
 
-# 4) package & write (no hard-coded chunksizes)
+#broadcast to xarray datasset and save as netcdf with compression
 out = xr.Dataset(
     data_vars=dict(
-        snow_days_per_year=snow_days_per_year,  # (year, y, x) float32 with NaNs
-        dem=dem,                                # (y, x) float32
+        snow_days_per_year=snow_days_per_year,  
+        dem=dem,                                
     ),
     coords=dict(
         year=snow_days_per_year["year"],

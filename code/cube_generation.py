@@ -4,14 +4,9 @@
 #-----------------------
 
 """
+Github Link: https://github.com/Lutzkk/snowstats
 This Script utilizes Google Earthengine + Xarray to generate a datacube consisting of snow cover information and a DEM for the Versoyen Basin  from the timespan 2018-2024.
 """
-
-
-# The Code aswell as a conda yaml can be found on the following GitHub repo:
-# https://github.com/Lutzkk/snowline
-
-
 
 # library imports
 import os 

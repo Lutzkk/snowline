@@ -4,7 +4,7 @@
 
 
 """
-Github Link: https://github.com/Lutzkk/snowline 
+Github Link: https://github.com/Lutzkk/snowstats
 
 NOTE: The GitHub Repo contains two yamls to rebuild two environments.
 This is due to package independencies between xee and xrspatial that take too long for conda/mamba to solve.
@@ -14,7 +14,7 @@ This script follows a notebook-like, narrative structure rather than a modular u
 NOTE: 
 project_root/
 ├── code/       all scripts (cube_generation.py, cube_preprocessing.py, seasonal_snowcover.py  <- (main script))
-├── data/       consists of datacube (iif datacube is rebuilt, raw data will be stored there)
+├── data/       consists of datacube (if datacube is rebuilt, raw data will be stored there)
 └── output/     generated results and plots
 
 PLEASE ENSURE THAT THE DATA STRUCTURE IS MAINTAINED AS DESCRIBED ABOVE and ALL SCRIPTS ARE PLACED IN THE CODE DIRECTORY.
