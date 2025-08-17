@@ -1,8 +1,7 @@
-# SNOWSTATS
+# SNOWSTATS  
 
 This repository was created as part of the **Advanced Spatial Python** course at the *Earth Observation Research Cluster*.  
 It is written in **Python 3.10.2** and explores the relationship between **terrain attributes** and **snow-cover duration** in the Versoyen Basin (French Alps).
-![AOI](output/dem_relief_hillshade_continuous.png)
 ---
 
 ## Data
