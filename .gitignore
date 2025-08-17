@@ -14,10 +14,8 @@ data/*
 *.ipynb
 
 #data files
-*.csv
 *.tif
 *.tiff
-*.png
 *.jpg
 *.jpeg
 *.gif
