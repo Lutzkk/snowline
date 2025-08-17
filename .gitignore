@@ -14,6 +14,7 @@ data/chunks/
 *.ipynb
 
 #data files
+data/Snowmask_datacube.nc
 *.tif
 *.tiff
 *.jpg
