@@ -36,7 +36,7 @@ The datacube is generated in two steps:
 
 ## Analysis 
 The analysis links snow-cover duration with topographic features derived from the DDEM. Terrain variables such as elevation, slope, aspect and curvature are extracted and compared against the number of snow-covered days per year.  
-This is done by generating classes for the different terrain features and then performing zonal statistics. 
+This is done by generating classes for the different terrain features and then performing zonal statistics.  
 **No Regression _OR_ Machine Learning is being used**.
 
 [terrain features](output/terrain_classes_2x2_discrete.png)
