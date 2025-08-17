@@ -1,21 +1,12 @@
-#snowline.py
+#cube_generation.py
+#python 3.10.2
 
 #-----------------------
 
-# This File is a standalone script that calculates the snowline altitude in an alpine catchment over multiple years
-# It uses Cloud Masked Landsat 8/9 data to determine the change in snowline alt over the last 5 years 
-# The Timespan of 5 years is chosen for multiple reasons: 
-# 1: It keeps the data size manageable and easily reproducible without needing to fallback on EE (which wasnt part of the course)
-# 2: Its more of a proof of concept than a full analysis, but can easily be extended to more years by changing the parameters
+"""
+This Script utilizes Google Earthengine + Xarray to generate a datacube consisting of snow cover information and a DEM for the Versoyen Basin  from the timespan 2018-2024.
+"""
 
-#-----------------------
-
-# IMPORTANT: This Script utilizes Earth Observation Data Access Gateway (EODAG) instead of EE to preprocess data. 
-# If EODAG is not installed, please install it and set up a
-# configuration yaml as described in the EODAG documentation.
-# https://eodag.readthedocs.io/en/stable/getting_started_guide/install.html
-
-#-----------------------
 
 # The Code aswell as a conda yaml can be found on the following GitHub repo:
 # https://github.com/Lutzkk/snowline
@@ -24,7 +15,7 @@
 
 # library imports
 import os 
-from pathlib import Path # Important for path handling indepondent of OS (code written on Ubuntu 22.04 system)
+from pathlib import Path # Important for path handling indepondent of OS 
 import ee
 import pandas as pd
 import xarray as xr
@@ -40,24 +31,16 @@ import shutil
 
 project_dir = Path(__file__).resolve().parents[1]
 data_dir = project_dir / "data"
-utils_dir = project_dir / "utils"
 output_dir = project_dir / "output"
 
 print(f"\nProject directory detected: {project_dir}")
 print("The following folders will be created if they don't exist:")
 print(f" - {data_dir.name}/")
-print(f" - {utils_dir.name}/")
 print(f" - {output_dir.name}/")
 
 
-confirm = input("\nDo you want to proceed with creating these folders here? (y/n): ").strip().lower()
-
-if confirm == "y":
-    for folder in [data_dir, utils_dir, output_dir]:
-        folder.mkdir(parents=True, exist_ok=True)
-    print("Folders created/already exist.")
-else:
-    print("No folders were created.")
+for folder in [data_dir, output_dir]:
+    folder.mkdir(parents=True, exist_ok=True)
 
 
 #------------------------
@@ -206,7 +189,6 @@ _, unique_indices = np.unique(dates_only, return_index=True)
 snowmask_unique = snowmask.isel(time=unique_indices)
 print(s2.first().select("SnowMask").projection().getInfo())
 
-# Confirm result
 print(f"Filtered to {snowmask_unique.sizes['time']} unique timestamps.")
 
 #------------------------
@@ -224,13 +206,13 @@ for i, ts in enumerate(snowmask_unique.time.values):
     date_str = ts_dt.strftime("%Y-%m-%d")
     file_path = chunk_dir / f"snowmask_{date_str}.nc"
     
-    #snowmask_da = snowmask_unique["SnowMask"].isel(time=i).compute()
+    snowmask_da = snowmask_unique["SnowMask"].isel(time=i).compute()
     
 
-    #Retain time dimension (otherwise you'll get a 2D slice)
-    #snowmask_da = snowmask_da.expand_dims(time=[ts_dt])
+    #Retain time dimension (otherwise it will be a 2D slice)
+    snowmask_da = snowmask_da.expand_dims(time=[ts_dt])
     
-    #snowmask_da.to_netcdf(file_path)
+    snowmask_da.to_netcdf(file_path)
     print(f"Exported {file_path.name}")
 
 print("All files exported successfully.")
@@ -239,7 +221,7 @@ print("All files exported successfully.")
 #DATACUBE CREATION
 #-------------------------
 nc_files = sorted(chunk_dir.glob("snowmask_*.nc")) #glob from the pathlib module (not glob module) -> ensures compatibility with Path objects
-arrays = [xr.open_dataarray(nc_file) for nc_file in nc_files] #Loop through filelist and open them as standalone arrays
+arrays = [xr.open_dataarray(nc_file) for nc_file in nc_files] #Loop through filelist and open them as standalone datta arrays
 
 # Concatenate along the time dimension and rename coordinates
 combined = xr.concat(arrays, dim="time").rename({"X": "lon", "Y": "lat"}) #concat along the time dimension to form a datacube
@@ -253,9 +235,10 @@ combined = combined.sortby("time")
 combined.attrs["bounds"]=tuple(combined.attrs["bounds"]) 
 combined.to_netcdf(data_dir / "Snowmask_datacube.nc")
 
-# --- align names & grids before merge ---
+# align names & grids before merge 
 
-# Use the cube you just made
+
+
 # combined dims are ("time", "lon/lat" or "X/Y") → make them ("time","y","x")
 if {"lon","lat"}.issubset(combined.dims):
     sm = combined.rename({"lon":"x","lat":"y"}).transpose("time","y","x")
@@ -268,7 +251,7 @@ else:
 sm = sm.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=False)
 sm = sm.rio.write_crs("EPSG:32631", inplace=False)
 
-# Open DEM (the GeoTIFF you exported) and reproject to *exactly* match sm’s grid
+# Open DEM (the GeoTIFF you exported) and reproject to match the snowmask grid
 dem_path = data_dir / "rge_alti_mosaic.tif"
 
 
@@ -277,20 +260,24 @@ print(dem)
 ref = sm.isel(time=0)
 dem_on_sm = dem.rio.reproject_match(ref, resampling=Resampling.average).astype("float32")
 
-# (optional sanity prints)
+# sanityy prints
 print("SM:", sm.sizes, "CRS:", sm.rio.crs.to_string())
 print("DEM on SM:", dem_on_sm.sizes, "CRS:", dem_on_sm.rio.crs.to_string())
 
 
 #-------------------------
 #DATACUBE MERGE DEM + SNOWMASK
+#NOTE: The following metadata munging is based on agreeing the netcdf conventions,
+#especially this section: https://cfconventions.org/cf-conventions/cf-conventions.html#cell-boundaries
+
+#without respect to the conventions the datacube is read only and cant be written to a drive.
 #-------------------------
 
 
-# 0) cast mask to compact dtype
-snowmask_u8 = sm.astype("uint8")   # 0/1
+#cast mask to compact dtype
+snowmask_u8 = sm.astype("uint8")  
 
-# 1) build a single dataset
+#build xarray dataset
 ds_out = xr.Dataset(
     data_vars=dict(
         snowmask=(("time","y","x"), snowmask_u8.data, {"long_name":"Snow mask (0/1)", "grid_mapping":"spatial_ref"}),
@@ -299,21 +286,21 @@ ds_out = xr.Dataset(
     coords=dict(
         time=sm["time"],
         y=sm["y"], x=sm["x"],
-        spatial_ref=xr.DataArray(sm.rio.crs.to_wkt()),  # grid mapping variable
+        spatial_ref=xr.DataArray(sm.rio.crs.to_wkt()), #grid mapping variable
     ),
     attrs={"Conventions":"CF-1.9"},
 )
 
-# 2) coord metadata
+#coord metadata
 ds_out["x"].attrs.update(standard_name="projection_x_coordinate", units="m")
 ds_out["y"].attrs.update(standard_name="projection_y_coordinate", units="m")
 
-# 3) (tiny safety) drop array-valued 'bounds' attrs if present (CF writer quirk)
+# drop array-valued 'bounds' attrs if present (CF writer quirk)
 for name in ds_out.variables:
     if "bounds" in ds_out[name].attrs and not isinstance(ds_out[name].attrs["bounds"], str):
         ds_out[name].attrs.pop("bounds")
 
-# 4) write with compression
+#write with compression
 out_nc = data_dir / "elevation_snowmask_cube.nc"
 encoding = {
     "snowmask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
@@ -323,6 +310,8 @@ encoding = {
     "time": {"zlib": True, "complevel": 4},
     "spatial_ref": {"zlib": True, "complevel": 4},
 }
+
+#save as netcdf
 ds_out.to_netcdf(out_nc, engine="netcdf4", encoding=encoding)
 print("Wrote:", out_nc)
 
@@ -330,10 +319,11 @@ print("Wrote:", out_nc)
 #-------------------------
 #CLEANUP
 #-------------------------
+
 #remove chunks
 if chunk_dir.exists() and chunk_dir.is_dir():
     print(f"Removing temporary folder: {chunk_dir}")
-    #shutil.rmtree(chunk_dir)
-    print("Chunks folder removed.")
+    #shutil.rmtree(chunk_dir) #THIS LINE REMOVE THE CHUNK DIRECTORY!! UNCOMMENT AND RUN BUT BE ABSOLUTELY SURE ITS POINTING TOO THE CHUNK FOLDER
+    #print("Chunks folder removed.")
 else:
     print("No chunk folder found, nothing to clean up.")

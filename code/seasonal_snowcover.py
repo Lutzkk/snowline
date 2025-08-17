@@ -10,6 +10,13 @@ NOTE: The GitHub Repo contains a yaml to rebuild the environment.
 It is HIGHLY recommended to use a clone of the repo instead of the standalone script.
 This script follows a notebook-like, narrative structure rather than a modular utility layout. A one script submission prevents a modular approach.
 
+NOTE: 
+project_root/
+├── code/       all scripts (cube_generation.py, cube_preprocessing.py, seasonal_snowcover.py  <- (main script))
+├── data/       consists of datacube (iif datacube is rebuilt, raw data will be stored there)
+└── output/     generated results and plots
+
+PLEASE ENSURE THAT THE DATA STRUCTURE IS MAINTAINED AS DESCRIBED ABOVE and ALL SCRIPTS ARE PLACED IN THE CODE DIRECTORY.
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 The script below investigates the dimensions of yearly snowcover in the versoyen basin in the french alps in regards to elevation attributes (elevation, slope, curvature, aspect) 
@@ -105,28 +112,22 @@ import pandas as pd
 import os
 
 #----------
+
 #Environment Setup
 
 #setup data dir, root dir, code dir
-here = Path(__file__).resolve().parent
-root = here.parent
+root     = Path(__file__).resolve().parents[1]
 
 data_dir = root / "data"
 outdir   = root / "output"
 
-print("Project root:", root)
-made_any = False
-if not data_dir.exists():
-    data_dir.mkdir(parents=True, exist_ok=True)
-    made_any = True
-if not outdir.exists():
-    outdir.mkdir(parents=True, exist_ok=True)
-    made_any = True
+print(f"\nProject directory detected: {root}")
+print("The following folders will be created if they don't exist:")
+print(f" - {data_dir.name}/")
+print(f" - {outdir.name}/")
 
-print(f"data_dir : {data_dir} ({'created' if made_any and data_dir.exists() else 'ok'})")
-print(f"outdir   : {outdir} ({'created' if made_any and outdir.exists() else 'ok'})")
 
-#NOTE: ENSURE THE DATACUBE ("snow_days_per_year.nc") IS INSIDE THE DATA_DIR
+#NOTE: ENSURE THE DATACUBE ("snow_days_per_year.nc") IS INSIDE THE DATA_DIR AND THE SCRIPT IS IN THE CODES FOLDER.
 
 #-----------------------------------------------------
 
@@ -151,7 +152,7 @@ std_days = snow_days_per_year.std(dim="year")
 #-----------------------------------------------
 
 #calc terrain attributes: hillshade, slope, aspect, curvature using xrspatial
-hs = hillshade(dem32, azimuth=315.0, angle_altitude=45.0)
+hs = hillshade(dem32, azimuth=315.0, angle_altitude=45.0) # for aesthetics
 slope_xrs = slope(dem32, name='slope')
 aspect_xrs = aspect(dem32, name='aspect')
 curv_xrs  = curvature(dem32, name='curvature')
