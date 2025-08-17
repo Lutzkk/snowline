@@ -4,7 +4,7 @@ __pycache__/
 *.so
 
 # data folder 
-data/*
+data/chunks/
 
 #venv 
 *.env
@@ -19,7 +19,6 @@ data/*
 *.jpg
 *.jpeg
 *.gif
-*.nc
 *.hdf5
 *.cpg
 *.dbf
