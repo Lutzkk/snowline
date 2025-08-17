@@ -24,6 +24,7 @@ import geopandas as gpd
 import numpy as np
 from rasterio.enums import Resampling
 import shutil
+import time
 
 #------------------------
 
@@ -122,8 +123,18 @@ task = ee.batch.Export.image.toDrive(
 )
 
 task.start() #download from drive after task (approx 2 mins)
+while task.active():
+    print("Exporting DEM to Google Drive...")
+    time.sleep(10)
+status=task.status()
+print("DEM Export Status:", status.get("state"))
+if status.get("state") != "COMPLETED":
+    raise RuntimeError(f"DEM export failed: {status.get('error_message', 'No error message provided')}")
 
-
+dem_path = data_dir / "rge_alti_mosaic.tif"
+input(f"\n Export completed. Please download 'rge_alti_mosaic.tif' from "
+      f"your Google Drive folder 'earthengine_exports' and place it into {dem_path.parent}.\n"
+      f"Press ENTER once the file is in place to continue...")
 #------------------------
 #BINARY SNOW MASK ACQUISITION
 #------------------------
@@ -251,10 +262,9 @@ else:
 sm = sm.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=False)
 sm = sm.rio.write_crs("EPSG:32631", inplace=False)
 
-# Open DEM (the GeoTIFF you exported) and reproject to match the snowmask grid
-dem_path = data_dir / "rge_alti_mosaic.tif"
 
 
+#Open the DEM exported from Google Drive earlier.
 dem = rxr.open_rasterio(dem_path).squeeze().rename("dem")
 print(dem)
 ref = sm.isel(time=0)

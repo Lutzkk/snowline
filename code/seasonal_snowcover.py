@@ -6,8 +6,9 @@
 """
 Github Link: https://github.com/Lutzkk/snowline 
 
-NOTE: The GitHub Repo contains a yaml to rebuild the environment.
-It is HIGHLY recommended to use a clone of the repo instead of the standalone script.
+NOTE: The GitHub Repo contains two yamls to rebuild two environments.
+This is due to package independencies between xee and xrspatial that take too long for conda/mamba to solve.
+It is HIGHLY recommended to use a clone of the repo instead of the standalone script to be able to reproduce the entire prreprocessing + analysis (not only the analysis results)
 This script follows a notebook-like, narrative structure rather than a modular utility layout. A one script submission prevents a modular approach.
 
 NOTE: 
@@ -219,7 +220,7 @@ ax.set_ylabel("Y")
 ax.set_xlim(xmin, xmax)
 ax.set_ylim(ymin, ymax)
 
-plt.savefig(outdir / "dem_relief_hillshade_continuous.png", dpi=300)
+plt.savefig(outdir / "dem_relief_hillshade_continuous.png", dpi=400)
 print("Overview Map created")
 #NOTE: Please check the output directory for the generated map.
 #Displaying Graphs in Python Scripts is not good practise. 
@@ -380,7 +381,7 @@ cbar3.ax.set_yticklabels(elev_labels)
 axes[1,1].set_title("Elevation classes")
 axes[1,1].axis("off")
 
-plt.savefig(outdir / "terrain_classes_2x2_discrete.png", dpi=300)
+plt.savefig(outdir / "terrain_classes_2x2_discrete.png", dpi=400)
 
 #---
 
@@ -437,7 +438,7 @@ axes[1,1].set_title("Histogram – Elevation classes")
 axes[1,1].set_ylabel("Pixel count")
 axes[1,1].tick_params(axis="x", rotation=45)
 
-plt.savefig(outdir / "terrain_class_histograms_2x2_counts.png", dpi=300)
+plt.savefig(outdir / "terrain_class_histograms_2x2_counts.png", dpi=400)
 print("Saved histogram panel")
 
 #----------------------------------------------
@@ -467,7 +468,7 @@ axes[1].imshow(hs, cmap="gray", origin= "lower",
                extent=extent)
 im1 = axes[1].imshow(std_days, extent=extent, origin="lower",
                      alpha=0.7)
-axes[1].set_title("Interannual std. of snow-covered days")
+axes[1].set_title("Interannual std. of snow-covered days (averaged from 2018 to 2024")
 axes[1].axis("off")
 cbar1 = fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
 cbar1.set_label("days")
@@ -528,28 +529,51 @@ axes = axes.ravel()
 for i, zone_type in enumerate(["Slope","Aspect","Curvature","Elevation"]):
     sub = df_all[df_all["zone_type"] == zone_type].copy()
 
-    # Use label if present; fallback to numeric zone id
+    #Use label if present fallback to numeric zone id
     label_col = "zone_label" if "zone_label" in sub.columns else "zone"
     
-    # Sort per type
+    #Sort by type
     if zone_type in orders:
         cat_order = orders[zone_type]
         sub[label_col] = sub[label_col].astype("category")
         sub[label_col] = sub[label_col].cat.set_categories(cat_order, ordered=True)
         sub = sub.sort_values(label_col)
     else:
-        # Slope/Elev: sort by numeric zone id
+        # slope+elev sort ascending
         sub = sub.sort_values("zone")
 
-    # Plot bars with error bars (std)
+    #Plot bars with std 
     axes[i].bar(sub[label_col].astype(str), sub["mean"], yerr=sub["std"], capsize=3)
     axes[i].set_title(f"{zone_type}: mean snow-covered days")
     axes[i].set_ylabel("days")
     axes[i].set_xlabel("")
     axes[i].tick_params(axis="x", rotation=45)
 
-plt.savefig(outdir / "zonal_means_4x_bars.png", dpi=300)
+
+#save
+plt.savefig(outdir / "zonal_means_4x_bars.png", dpi=400)
 
 """
+The zonal statistics reveal interesting patterns regarding snow cover dynamics across different 
+terrain features. 
 
+Elevation seems to be the dominant factor, with a strong rise in mean snow-cover days
+per year with increasing altitude. Whatsoever at the highest elevations, the snowcover seems to be dropping,
+but since there are almost no pixels in the altitude of 3300 meters or more, this pattern most likely is not representative.
+
+Slope also seems to be playing a significant role in regards to mean snow cover duration, as increasing slopes tend to contain snow
+for a shorter period of time compared to flatter areas. 
+
+Interestingly, the aspect seems to be playing a negligible role in influencing snow cover duration, with no clear pattern emerging from the data.
+This might suggest skewedness in the data, since only a small catchment is being investigated with slopes facing in different directions at different altitudes.
+
+Curvature appears to have very little impact on the snowcover duration.
+
+It is important to keep in mind that the results are influenced by different factors:
+1. The small spatial extent does not allow for representative conclusions to be drawn.
+2. The temporal resolution of the data is unevenly sampled. 
+The interpolation logic is too simple to really assess what happens in bigger time frames.
+3. Sen2Cor tends to misclassify clouds in complex terrain, so no cloud masking was applied.
+Since the NDSI differentiates between Clouds and Snow (due to their spectral characteristics), some false negatives 
+might be the result.
 """
